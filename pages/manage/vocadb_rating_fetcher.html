@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VocaDB RatingScore 抓取工具</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#101219;--panel:#181b24;--text:#f1f3f8;--muted:#98a0b3;
+      --border:#2b3040;--accent:#9b8cff;--danger:#ff6b6b;--ok:#5dd39a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(720px,calc(100% - 28px));margin:48px auto}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:22px}
+    .eyebrow{color:var(--accent);font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px}
+    h1{font-size:26px;margin:5px 0 6px}
+    p{color:var(--muted)}
+    .row{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:18px}
+    select,button{min-height:44px;border-radius:11px;border:1px solid var(--border);background:#11141c;color:var(--text);padding:8px 12px;font:inherit}
+    button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .progress{height:9px;border-radius:999px;background:#24283a;overflow:hidden;margin-top:18px}
+    .bar{height:100%;width:0;background:var(--accent);transition:width .15s}
+    #status{margin-top:10px;color:var(--muted);white-space:pre-wrap}
+    .ok{color:var(--ok)!important}.error{color:var(--danger)!important}
+    code{background:#11141c;padding:2px 5px;border-radius:5px}
+    .note{margin-top:18px;padding-top:16px;border-top:1px solid var(--border);font-size:12px}
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="eyebrow">Daily Vocaloid</div>
+    <h1>VocaDB RatingScore 抓取工具</h1>
+    <p>
+      这是一个独立本地页面。它只读取 VocaDB 的公开 GET API，
+      不需要账号，不会修改 VocaDB。抓到的数据会保存成一个 JSON 文件，
+      再导入你的 AstrBot 管理页。
+    </p>
+
+    <div class="row">
+      <select id="count">
+        <option value="100">Top 100</option>
+        <option value="500" selected>Top 500</option>
+        <option value="1000">Top 1000</option>
+      </select>
+      <button id="start">开始抓取并保存 JSON</button>
+    </div>
+
+    <div class="progress"><div class="bar" id="bar"></div></div>
+    <div id="status">等待开始。</div>
+
+    <p class="note">
+      如果这里仍然失败，说明不是 AstrBot 页面的 CSP，而是你当前网络到
+      <code>vocadb.net</code> 的脚本/API 请求也被拦截。那时不要反复重试；
+      可以直接用浏览器打开官方 API 地址保存 JSON，或换一个可访问 VocaDB 的网络环境运行这个文件一次。
+    </p>
+  </div>
+</main>
+
+<script>
+const API = "https://vocadb.net/api/songs";
+const statusEl = document.getElementById("status");
+const bar = document.getElementById("bar");
+const startBtn = document.getElementById("start");
+
+function apiUrl(start, maxResults) {
+  const u = new URL(API);
+  u.searchParams.set("songTypes", "Original");
+  u.searchParams.set("status", "Finished");
+  u.searchParams.set("start", String(start));
+  u.searchParams.set("maxResults", String(maxResults));
+  u.searchParams.set("sort", "RatingScore");
+  u.searchParams.set("lang", "Japanese");
+  return u.toString();
+}
+
+function jsonp(url, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const cb = "__vocadb_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+    const u = new URL(url);
+    u.searchParams.set("callback", cb);
+
+    const s = document.createElement("script");
+    let done = false;
+
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { delete window[cb]; } catch (_) { window[cb] = undefined; }
+      s.remove();
+    };
+
+    window[cb] = data => {
+      cleanup();
+      resolve(data);
+    };
+
+    s.onerror = () => {
+      cleanup();
+      reject(new Error("VocaDB JSONP 脚本加载失败"));
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("VocaDB JSONP 请求超时"));
+    }, timeoutMs);
+
+    s.src = u.toString();
+    document.head.appendChild(s);
+  });
+}
+
+function saveJson(data, count) {
+  const blob = new Blob(
+    [JSON.stringify({
+      format: "daily-vocaloid-vocadb-ratings",
+      generated_at: new Date().toISOString(),
+      count: data.length,
+      items: data
+    }, null, 2)],
+    {type: "application/json"}
+  );
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `vocadb_ratings_top${count}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 1000);
+}
+
+startBtn.addEventListener("click", async () => {
+  const target = Number(document.getElementById("count").value || 500);
+  startBtn.disabled = true;
+  bar.style.width = "0%";
+  statusEl.className = "";
+  statusEl.textContent = "正在连接 VocaDB…";
+
+  try {
+    const all = [];
+
+    for (let start = 0; start < target; start += 50) {
+      const size = Math.min(50, target - start);
+      statusEl.textContent = `正在读取 ${start}/${target}…`;
+      bar.style.width = `${Math.round((start / target) * 100)}%`;
+
+      const data = await jsonp(apiUrl(start, size));
+      const items = Array.isArray(data && data.items) ? data.items : [];
+
+      if (!items.length) break;
+      all.push(...items);
+
+      if (items.length < size) break;
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    if (!all.length) throw new Error("VocaDB 没有返回歌曲数据");
+
+    bar.style.width = "100%";
+    statusEl.className = "ok";
+    statusEl.textContent =
+      `成功读取 ${all.length} 首。正在生成 vocadb_ratings_top${target}.json…`;
+
+    saveJson(all, target);
+  } catch (error) {
+    statusEl.className = "error";
+    statusEl.textContent =
+      "抓取失败：" + (error && error.message ? error.message : String(error));
+  } finally {
+    startBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

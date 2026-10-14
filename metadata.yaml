@@ -1,0 +1,12 @@
+name: astrbot_plugin_daily_vocaloid
+
+display_name: 今日术力口
+
+author: JXMc
+
+version: 2.3.5
+
+description: 随机推荐术力口歌曲，七天不重复
+
+repo: https://github.com/fawei0831/astrbot_plugin_daily_vocaloid
+

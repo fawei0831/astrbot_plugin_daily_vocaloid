@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>今日术力口管理</title>
+  <link rel="stylesheet" href="./style.css?v=2.3.2" />
+</head>
+<body>
+<main class="shell">
+  <section class="hero">
+    <div class="eyebrow">Daily Vocaloid · Hall of Fame Catalog</div>
+    <h1>今日术力口管理</h1>
+    <p>
+      日语 / 外语：Vocawiki；中文：VCPedia。
+      自动推荐最低门槛统一为殿堂曲，Bilibili 只验证百科中的精确链接，不做模糊搜索。
+    </p>
+  </section>
+
+  <section class="actionDeck">
+    <article class="actionCard actionCardPrimary">
+      <div class="actionHead">
+        <span class="actionIcon">🎼</span>
+        <div>
+          <strong>同步日术 + 中术曲库</strong>
+          <small>低频串行同步：Vocawiki 日/外语 + VCPedia 中文；已抓结果即时保存</small>
+        </div>
+      </div>
+      <button id="catalogBtn" class="primary wideBtn">同步全部曲库</button>
+    </article>
+
+    <article class="actionCard">
+      <div class="actionHead">
+        <span class="actionIcon">📺</span>
+        <div>
+          <strong>Bilibili 巡检（可选）</strong>
+          <small>已验证不会重复；每批约 70% 日/外语 + 30% 中文；触发保护会自动停</small>
+        </div>
+      </div>
+      <div class="actionRow">
+        <select id="verifyCount">
+          <option value="10">验证 10 首</option>
+          <option value="20" selected>验证 20 首</option>
+          <option value="50">验证 50 首</option>
+          <option value="100">验证 100 首</option>
+          <option value="200">验证 200 首</option>
+          <option value="500">验证 500 首（长任务）</option>
+        </select>
+        <button id="verifyBtn">开始巡检</button>
+      </div>
+      <div class="actionRow secondaryActions">
+  <button id="retryBtn" class="ghostBtn">重试巡检失败项</button>
+  <button id="stopVerifyBtn" class="ghostBtn dangerGhost">停止巡检</button>
+</div>
+    </article>
+
+    <article class="actionCard">
+      <div class="actionHead">
+        <span class="actionIcon">🏛️</span>
+        <div>
+          <strong>统一质量门槛</strong>
+          <small>无论日术还是中术，都必须至少达到百科认定的殿堂级</small>
+        </div>
+      </div>
+      <div class="ruleGrid">
+        <span>🌟 神话</span><strong>推荐权重 45%</strong>
+        <span>🔥 传说</span><strong>推荐权重 35%</strong>
+        <span>🏛️ 殿堂</span><strong>推荐权重 20%</strong>
+      </div>
+      <div class="ruleNote">
+        语言仍为每次独立随机：日语 / 外语 70%，中文 30%。
+        某等级没有未重复曲目时会自动向其他等级回退。
+      </div>
+    </article>
+  </section>
+
+  <section id="stats" class="stats"></section>
+
+  <section class="panel">
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="搜索曲名 / P主 / 引擎 / BV号" />
+
+      <select id="language">
+        <option value="">日术 + 中术</option>
+        <option value="foreign">日语 / 外语</option>
+        <option value="zh">中文</option>
+      </select>
+
+      <select id="source">
+        <option value="">全部来源</option>
+        <option value="vocawiki">Vocawiki</option>
+        <option value="vcpedia">VCPedia</option>
+      </select>
+
+      <select id="level">
+        <option value="">全部等级</option>
+        <option value="hall">🏛️ 殿堂</option>
+        <option value="legend">🔥 传说</option>
+        <option value="myth">🌟 神话</option>
+      </select>
+
+      <select id="status">
+        <option value="">全部状态</option>
+        <option value="enabled">✅ 可推荐</option>
+        <option value="cover">🖼️ 有百科封面</option>
+        <option value="verified">🟣 B站已巡检</option>
+        <option value="pending">○ 未巡检B站</option>
+        <option value="error">⚠️ B站巡检失败</option>
+        <option value="manual">🔒 人工锁定</option>
+      </select>
+
+      <button id="searchBtn">搜索</button>
+      <button id="refreshBtn">刷新</button>
+    </div>
+
+    <div id="message" class="message" hidden></div>
+
+    <div id="progressWrap" class="progressWrap" hidden>
+      <div class="progressText">
+        <span id="progressLabel"></span>
+        <span id="progressPercent"></span>
+      </div>
+      <div class="progressTrack">
+        <div id="progressBar" class="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>曲目</th>
+            <th>P主 / 引擎</th>
+            <th>语言</th>
+            <th>等级</th>
+            <th>来源</th>
+            <th>BV / 状态</th>
+            <th>播放</th>
+            <th>推荐</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="songs"></tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <button id="prevBtn">上一页</button>
+      <span id="pageInfo">0-0 / 0</span>
+      <button id="nextBtn">下一页</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="editDialog">
+  <div class="dialogCard">
+    <div class="dialogHead">
+      <h2>编辑歌曲</h2>
+      <button id="closeDialogBtn" class="iconBtn">✕</button>
+    </div>
+
+    <label>曲名
+      <input id="editTitle" />
+    </label>
+
+    <div class="grid2">
+      <label>P主
+        <input id="editProducer" />
+      </label>
+      <label>Vocal（可人工补充）
+        <input id="editVocal" />
+      </label>
+    </div>
+
+    <div class="grid2">
+      <label>投稿日期
+        <input id="editDate" />
+      </label>
+      <label>引擎
+        <input id="editEngine" readonly />
+      </label>
+    </div>
+
+    <label>BV号
+      <input id="editBvid" />
+    </label>
+
+    <label>Bilibili 链接
+      <input id="editBilibili" />
+    </label>
+
+    <label>封面 URL
+      <input id="editCover" />
+    </label>
+
+    <section class="manualBox">
+      <div class="manualBoxHead">
+        <div>
+          <strong>推荐控制</strong>
+          <small>自动规则最低殿堂；人工锁定可以覆盖。</small>
+        </div>
+        <select id="editControlMode">
+          <option value="auto">自动规则</option>
+          <option value="manual">🔒 人工锁定</option>
+        </select>
+      </div>
+
+      <div class="grid2">
+        <label>推荐池
+          <select id="editPool">
+            <option value="hot">🔥 热门</option>
+            <option value="normal">🎵 殿堂</option>
+            <option value="new">🆕 新曲</option>
+            <option value="excluded">🚫 排除</option>
+          </select>
+        </label>
+        <label>推荐状态
+          <select id="editAvailable">
+            <option value="1">✅ 启用</option>
+            <option value="0">停用</option>
+          </select>
+        </label>
+      </div>
+
+      <p id="editModeHint" class="manualHint"></p>
+    </section>
+
+    <div class="sourceBox">
+      <strong>百科来源</strong>
+      <div id="editSource" class="sourceText">—</div>
+    </div>
+
+    <div class="dialogActions">
+      <button id="deleteBtn" class="danger">删除</button>
+      <span class="spacer"></span>
+      <button id="cancelBtn">取消</button>
+      <button id="saveBtn" class="primary">保存</button>
+    </div>
+  </div>
+</dialog>
+
+<script type="module" src="./app.js?v=2.3.2"></script>
+</body>
+</html>
