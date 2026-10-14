@@ -18,10 +18,13 @@ from .core.database import (
 )
 from .core.recommender import recommend
 from .core.bilibili import (
+    COVER_DIR,
+    prepare_cover,
     prepare_manual_bilibili,
     verify_catalog_bilibili,
 )
 from .core.catalog import sync_catalog
+from .core.cover_cache import prune_cache
 
 
 PLUGIN_NAME = "astrbot_plugin_daily_vocaloid"
@@ -32,13 +35,14 @@ VALID_POOLS = {"hot", "normal", "new", "excluded"}
     PLUGIN_NAME,
     "JXMc",
     "今日术力口",
-    "2.3.5",
+    "2.3.6",
 )
 class DailyVocaloid(Star):
 
     def __init__(self, context):
         super().__init__(context)
         init_database()
+        prune_cache(COVER_DIR)
 
         context.register_web_api(
             f"/{PLUGIN_NAME}/health",
@@ -236,6 +240,10 @@ class DailyVocaloid(Star):
 
             # 直接等待平台发送完成，成功后才写入七天历史。
             try:
+                try:
+                    cover_local = await prepare_cover(bvid, cover_url, cover_local)
+                except Exception:
+                    logger.exception("今日术力口封面缓存失败，使用原封面地址")
                 if cover_local and os.path.isfile(cover_local):
                     image = Comp.Image.fromFileSystem(cover_local)
                 elif cover_url.startswith(("http://", "https://")):

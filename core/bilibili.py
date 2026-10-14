@@ -6,6 +6,7 @@ from pathlib import Path
 import aiohttp
 
 from .database import get_conn, recalculate_pools, set_meta
+from .cover_cache import save_cover, touch_cover
 
 
 VIEW_URL = "https://api.bilibili.com/x/web-interface/view"
@@ -204,13 +205,34 @@ async def _cache_cover(session, bvid, cover_url):
                 return ""
 
             path = COVER_DIR / f"{bvid}{suffix}"
-            path.write_bytes(data)
-            return str(path)
+            cached = save_cover(path, data)
+            return str(cached) if cached else ""
 
     except BilibiliProtectionError:
         raise
     except Exception:
         return ""
+
+
+async def prepare_cover(bvid, cover_url, cover_local=""):
+    # 缓存被清理后按需补回，不修改歌曲状态或推荐历史。
+    path = Path(cover_local) if cover_local else None
+    if path is not None and path.is_file():
+        if path.parent.resolve() == COVER_DIR.resolve():
+            touch_cover(path)
+        return str(path)
+    for suffix in ('.jpg', '.jpeg', '.png', '.webp'):
+        cached = COVER_DIR / (bvid + suffix)
+        if cached.is_file():
+            touch_cover(cached)
+            return str(cached)
+    if not cover_url:
+        return ""
+    async with aiohttp.ClientSession(
+        headers={"User-Agent": USER_AGENT},
+        timeout=aiohttp.ClientTimeout(total=12),
+    ) as session:
+        return await _cache_cover(session, bvid, cover_url)
 
 
 def _level_from_views(views):
